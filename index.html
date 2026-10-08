@@ -186,7 +186,7 @@ const ENDPOINT = "https://script.google.com/macros/s/AKfycbzSYhkkZKjStlpQTLYmV7Z
 const TZ = "America/Toronto";
 const DAYS_OPEN = [3,4,5];                     // Wed, Thu, Fri
 const TIMES = ["09:30","10:00","10:30","11:00","11:30","12:00"];
-const MONTHS_AHEAD = 3;                        // this month + next 2
+const DAYS_AHEAD = 21;                         // show the next 3 weeks
 /* ==================== */
 
 const T = {
@@ -195,7 +195,7 @@ const T = {
     aboutH:"About MLI",about:"Founded in Montréal in 2009, MLI has specialized in French language education for over 17 years. Our teaching team includes instructors with master’s and doctoral degrees and certified TEF, TCF and DELF/DALF examiners. Together we have helped tens of thousands of students reach their language test goals and move forward in Canada.",
     f1:"Founded in Montréal",f2:"Campuses: Montréal, Toronto, Vancouver",f3:"Accredited by Languages Canada since",f4:"Official exam centre in Toronto",site:"Visit our website:",
     youH:"Your details",name:"Full name",email:"Email",phone:"Phone",optional:"(optional)",note:"Anything we should know",statusQ:"Your status in Canada",sWP:"Work permit",sSP:"Study permit",sPR:"Permanent resident",sCI:"Canadian citizen",sOT:"Other",sOTlabel:"Please explain",errStatus:"Please select your status in Canada.",errOther:"Please explain your status.",
-    slotsH:"Choose a time",slotsHint:"Interviews take place Wednesday to Friday mornings and last 30 minutes. Choose a month, then a time. Times that are crossed out are already booked.",
+    slotsH:"Choose a time",slotsHint:"Interviews take place Wednesday to Friday mornings and last 30 minutes. Times that are crossed out are already booked.",
     loading:"Loading available times…",loadFail:"We could not load the available times. Please refresh the page.",
     weekOf:"Week of",openCount:n=>n+(n===1?" time open":" times open"),tz:"All times are Eastern Time (Toronto / Montréal).",noSlots:"No times left this day",
     submit:"Book this interview",sending:"Booking…",chosen:"Selected: ",
@@ -208,7 +208,7 @@ const T = {
     aboutH:"À propos de MLI",about:"Fondé à Montréal en 2009, l’Institut de langues de Montréal se spécialise dans l’enseignement du français depuis plus de 17 ans. Notre équipe compte des enseignants titulaires de maîtrises et de doctorats ainsi que des examinateurs certifiés TEF, TCF et DELF/DALF. Nous avons accompagné des dizaines de milliers d’apprenants vers la réussite de leurs examens et de leur parcours au Canada.",
     f1:"Fondé à Montréal",f2:"Campus : Montréal, Toronto, Vancouver",f3:"Accrédité par Langues Canada depuis",f4:"Centre d’examen officiel à Toronto",site:"Visitez notre site :",
     youH:"Vos coordonnées",name:"Nom complet",email:"Courriel",phone:"Téléphone",optional:"(facultatif)",note:"Informations utiles",statusQ:"Votre statut au Canada",sWP:"Permis de travail",sSP:"Permis d’études",sPR:"Résident permanent",sCI:"Citoyen canadien",sOT:"Autre",sOTlabel:"Veuillez préciser",errStatus:"Veuillez indiquer votre statut au Canada.",errOther:"Veuillez préciser votre statut.",
-    slotsH:"Choisissez une plage horaire",slotsHint:"Les entrevues ont lieu du mercredi au vendredi en matinée et durent 30 minutes. Choisissez un mois, puis une plage horaire. Les plages barrées sont déjà réservées.",
+    slotsH:"Choisissez une plage horaire",slotsHint:"Les entrevues ont lieu du mercredi au vendredi en matinée et durent 30 minutes. Les plages barrées sont déjà réservées.",
     loading:"Chargement des plages disponibles…",loadFail:"Impossible de charger les plages disponibles. Veuillez actualiser la page.",
     weekOf:"Semaine du",openCount:n=>n+(n===1?" plage libre":" plages libres"),tz:"Toutes les heures sont à l’heure de l’Est (Toronto / Montréal).",noSlots:"Plus de plages ce jour-là",
     submit:"Réserver cette entrevue",sending:"Réservation en cours…",chosen:"Choix : ",
@@ -231,22 +231,18 @@ function torontoNow(){
   return new Date(Date.UTC(g("year"),g("month")-1,g("day"),12));
 }
 function iso(d){return d.toISOString().slice(0,10)}
-function buildMonths(){
+function buildWeeks(){
   const start=torontoNow(); start.setUTCDate(start.getUTCDate()+1);
-  const end=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+MONTHS_AHEAD,1,12));
-  const months=new Map();
+  const end=new Date(start); end.setUTCDate(end.getUTCDate()+DAYS_AHEAD);
+  const weeks=new Map();
   for(const d=new Date(start); d<end; d.setUTCDate(d.getUTCDate()+1)){
     if(!DAYS_OPEN.includes(d.getUTCDay())) continue;
-    const mk=iso(d).slice(0,7);
-    if(!months.has(mk)) months.set(mk,{first:new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1,12)),weeks:new Map()});
     const wk=new Date(d); wk.setUTCDate(wk.getUTCDate()-((wk.getUTCDay()+6)%7));
-    const W=months.get(mk).weeks, k=iso(wk);
-    if(!W.has(k)) W.set(k,{mon:wk,days:[]}); W.get(k).days.push(new Date(d));
+    const k=iso(wk); if(!weeks.has(k)) weeks.set(k,{mon:wk,days:[]}); weeks.get(k).days.push(new Date(d));
   }
-  return [...months.entries()].map(([key,v])=>({key,first:v.first,weeks:[...v.weeks.values()]}));
+  return [...weeks.values()];
 }
-const MONTHS=buildMonths();
-let curMonth=MONTHS.length?MONTHS[0].key:null;
+const WEEKS=buildWeeks();
 
 function fmt(d,o){return new Intl.DateTimeFormat(T[lang].locale,{timeZone:"UTC",...o}).format(d)}
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1)}
@@ -258,19 +254,7 @@ function render(){
   const box=document.getElementById("weeks"); box.innerHTML="";
   document.getElementById("loading").hidden=loaded;
   if(!loaded) return;
-  const tabs=document.createElement("div"); tabs.className="months"; tabs.setAttribute("role","tablist");
-  MONTHS.forEach(M=>{
-    const b=document.createElement("button"); b.type="button"; b.className="month"; b.id="m-"+M.key;
-    b.setAttribute("role","tab"); b.setAttribute("aria-selected",M.key===curMonth);
-    const cnt=M.weeks.reduce((n,w)=>n+w.days.filter(d=>!closed.has(iso(d))).reduce((a,d)=>a+TIMES.filter(t=>!booked.has(iso(d)+"|"+t)).length,0),0);
-    b.innerHTML=""; const n=document.createElement("span"); n.textContent=cap(fmt(M.first,{month:"long",year:"numeric"}));
-    const c=document.createElement("small"); c.textContent=T[lang].openCount(cnt); b.append(n,c);
-    b.onclick=()=>{curMonth=M.key; render();};
-    tabs.append(b);
-  });
-  box.append(tabs);
-  const M=MONTHS.find(x=>x.key===curMonth); if(!M) return;
-  M.weeks.forEach(w0=>{
+  WEEKS.forEach(w0=>{
     const w={mon:w0.mon,days:w0.days.filter(d=>!closed.has(iso(d)))};
     if(!w.days.length) return;
     const sec=document.createElement("div"); sec.className="week";
