@@ -122,7 +122,7 @@ legend{font-weight:700;font-size:14px;padding:0;margin-bottom:8px}
     <p class="lead" data-t="lead"></p>
   </section>
 
-  <section class="about">
+  <section class="about interview-only">
     <h2 data-t="aboutH"></h2>
     <p data-t="about"></p>
     <div class="facts">
@@ -141,8 +141,8 @@ legend{font-weight:700;font-size:14px;padding:0;margin-bottom:8px}
         <div class="fields">
           <label><span data-t="name"></span><input id="f-name" autocomplete="name" required></label>
           <label><span data-t="email"></span><input id="f-email" type="email" autocomplete="email" required></label>
-          <label><span><span data-t="phone"></span> <span class="opt" data-t="optional"></span></span><input id="f-phone" type="tel" autocomplete="tel"></label>
-          <fieldset class="full">
+          <label class="interview-only"><span><span data-t="phone"></span> <span class="opt" data-t="optional"></span></span><input id="f-phone" type="tel" autocomplete="tel"></label>
+          <fieldset class="full interview-only">
             <legend data-t="statusQ"></legend>
             <div class="choices">
               <label class="choice"><input type="radio" name="wstatus" id="ws-wp" value="wp"><span data-t="sWP"></span></label>
@@ -153,7 +153,7 @@ legend{font-weight:700;font-size:14px;padding:0;margin-bottom:8px}
             </div>
             <label id="otherWrap" hidden><span data-t="sOTlabel"></span><input id="f-other"></label>
           </fieldset>
-          <label class="full"><span><span data-t="note"></span> <span class="opt" data-t="optional"></span></span><textarea id="f-note"></textarea></label>
+          <label class="full interview-only"><span><span data-t="note"></span> <span class="opt" data-t="optional"></span></span><textarea id="f-note"></textarea></label>
         </div>
       </section>
 
@@ -217,6 +217,22 @@ const T = {
     doneH:"Merci, votre entrevue est réservée",doneBody:"Nous avons bien reçu votre réservation et vous contacterons par courriel avec les détails de l’entrevue. Une confirmation a aussi été envoyée à votre adresse courriel.",
     locale:"fr-CA"}
 };
+
+const TYPE = new URLSearchParams(location.search).get("type")==="demo" ? "demo" : "interview";
+if(TYPE==="demo"){
+  Object.assign(T.en,{title:"Teaching demo invitation",
+    lead:"Thank you for your interview. We would like to invite you to a short teaching demo. Please choose one time below and submit. We will receive your booking right away.",
+    slotsHint:"Demos take place Wednesday to Friday mornings and last 30 minutes. Times that are crossed out are already booked.",
+    submit:"Book this demo",
+    doneH:"Thank you, your demo is booked",doneBody:"We have received your booking and will email you the confirmation and the Zoom link. A copy has also been sent to your email address."});
+  Object.assign(T.fr,{title:"Invitation à une démonstration de cours",
+    lead:"Merci pour votre entrevue. Nous aimerions vous inviter à une courte démonstration de cours. Veuillez choisir une plage horaire ci-dessous et l’envoyer. Nous recevrons votre réservation immédiatement.",
+    slotsHint:"Les démonstrations ont lieu du mercredi au vendredi en matinée et durent 30 minutes. Les plages barrées sont déjà réservées.",
+    submit:"Réserver cette démo",
+    doneH:"Merci, votre démo est réservée",doneBody:"Nous avons bien reçu votre réservation et vous enverrons la confirmation et le lien Zoom par courriel. Une copie a aussi été envoyée à votre adresse courriel."});
+  document.querySelectorAll(".interview-only").forEach(el=>el.hidden=true);
+  document.title="MLI Teaching Demo Booking";
+}
 
 let lang = (navigator.language||"en").toLowerCase().startsWith("fr") ? "fr" : "en";
 try{ const s=localStorage.getItem("mli-lang"); if(s==="en"||s==="fr") lang=s; }catch(e){}
@@ -321,15 +337,17 @@ document.getElementById("form").addEventListener("submit",async ev=>{
   const SLABEL={wp:"Work permit / Permis de travail",sp:"Study permit / Permis d’études",pr:"Permanent resident / Résident permanent",ci:"Canadian citizen / Citoyen canadien",ot:"Other / Autre"};
   if(!name) return showErr(T[lang].errName);
   if(!/^\S+@\S+\.\S+$/.test(email)) return showErr(T[lang].errEmail);
-  if(!ws) return showErr(T[lang].errStatus);
-  if(ws.value==="ot" && !other) return showErr(T[lang].errOther);
+  if(TYPE==="interview"){
+    if(!ws) return showErr(T[lang].errStatus);
+    if(ws.value==="ot" && !other) return showErr(T[lang].errOther);
+  }
   if(!picked) return showErr(T[lang].errSlot);
-  const wstatus=SLABEL[ws.value]+(ws.value==="ot"?": "+other:"");
+  const wstatus=TYPE==="interview"?SLABEL[ws.value]+(ws.value==="ot"?": "+other:""):"";
   document.getElementById("err").hidden=true;
   const btn=document.getElementById("go"); btn.disabled=true; btn.textContent=T[lang].sending;
   try{
     const r=await fetch(ENDPOINT,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({slot:picked,label:slotLabel(picked),name,email,phone,wstatus,note,lang})});
+      body:JSON.stringify({type:TYPE,slot:picked,label:slotLabel(picked),name,email,phone:TYPE==='demo'?'':phone,wstatus,note:TYPE==='demo'?'':note,lang})});
     const j=await r.json();
     if(j.ok){
       document.getElementById("form").hidden=true;
